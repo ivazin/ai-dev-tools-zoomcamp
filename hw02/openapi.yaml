@@ -1,0 +1,917 @@
+openapi: 3.0.3
+info:
+  title: SplitWave Backend API
+  description: >
+    Backend REST API specification expected by the SplitWave frontend
+    (Collaborative Expense Splitter). Designed around zero-friction, capability-based URLs
+    where access is governed by the event ID rather than user credentials/passwords.
+  version: 1.0.0
+servers:
+  - url: /api
+    description: Default API prefix (configured via VITE_API_BASE_URL)
+
+tags:
+  - name: Events
+    description: Event lifecycle and participant roster operations
+  - name: Expenses
+    description: Expense creation, modification, itemization, and deletion
+  - name: Settlements
+    description: Debt settlement records
+  - name: Exchange Rates
+    description: Multi-currency exchange rate conversions via ECB reference rates
+
+paths:
+  /events:
+    post:
+      tags:
+        - Events
+      summary: Create a new event
+      description: >
+        Creates a new event with a base currency and initial participants roster.
+        No authentication required.
+      security: []
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventInput'
+      responses:
+        '200':
+          description: Event created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventData'
+        '201':
+          description: Event created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventData'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{eventId}:
+    get:
+      tags:
+        - Events
+      summary: Get full event details
+      description: >
+        Fetches an event's full state including participants, expenses, line items,
+        settlements, and activity logs.
+        Capability-based access via event ID in URL; no authentication required.
+      security: []
+      operationId: getEvent
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: The unique identifier (e.g. 21-character NanoID / UUID) of the event
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Full event details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventData'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{eventId}/participants:
+    post:
+      tags:
+        - Events
+      summary: Add participant to event
+      description: >
+        Adds a new participant to the event roster.
+        Capability-based access via event ID; no authentication required.
+      security: []
+      operationId: addParticipant
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: The event ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Alex
+      responses:
+        '200':
+          description: Participant added or existing participant returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+        '201':
+          description: Participant added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{eventId}/expenses:
+    post:
+      tags:
+        - Expenses
+      summary: Create expense for event
+      description: >
+        Creates a new expense (simple total-amount split or itemized receipt).
+        Capability-based access via event ID; no authentication required.
+      security: []
+      operationId: createExpense
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: The event ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExpenseInput'
+      responses:
+        '200':
+          description: Expense created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '201':
+          description: Expense created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          description: Invalid expense input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /expenses/{expenseId}:
+    put:
+      tags:
+        - Expenses
+      summary: Update existing expense
+      description: >
+        Updates details, split allocations, or line items of an existing expense.
+        Capability-based access; no authentication required.
+      security: []
+      operationId: updateExpense
+      parameters:
+        - name: expenseId
+          in: path
+          required: true
+          description: The ID of the expense to update
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExpenseInput'
+      responses:
+        '200':
+          description: Updated expense object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          description: Invalid update data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Expense not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{eventId}/expenses/{expenseId}:
+    delete:
+      tags:
+        - Expenses
+      summary: Delete an expense
+      description: >
+        Deletes an expense from an event. Expects a JSON request body containing actorId
+        for audit log attribution.
+        Capability-based access; no authentication required.
+      security: []
+      operationId: deleteExpense
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: The event ID
+          schema:
+            type: string
+        - name: expenseId
+          in: path
+          required: true
+          description: The expense ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - actorId
+              properties:
+                actorId:
+                  type: string
+                  description: Participant ID of the actor performing deletion (for audit log)
+                  example: p-1234
+      responses:
+        '200':
+          description: Expense deleted successfully
+        '204':
+          description: Expense deleted successfully (no content)
+        '404':
+          description: Event or expense not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{eventId}/settlements:
+    post:
+      tags:
+        - Settlements
+      summary: Record debt settlement
+      description: >
+        Records a debt settlement payment between two participants.
+        Capability-based access; no authentication required.
+      security: []
+      operationId: createSettlement
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: The event ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSettlementInput'
+      responses:
+        '200':
+          description: Settlement recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settlement'
+        '201':
+          description: Settlement recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settlement'
+        '400':
+          description: Invalid settlement payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /exchange-rates:
+    get:
+      tags:
+        - Exchange Rates
+      summary: Get exchange rate between currencies
+      description: >
+        Fetches the exchange rate between two currencies for a given date (or latest available).
+        Public endpoint; no authentication required.
+      security: []
+      operationId: getExchangeRate
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Source currency code
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: to
+          in: query
+          required: true
+          description: Target currency code
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: date
+          in: query
+          required: false
+          description: Historical date in YYYY-MM-DD format
+          schema:
+            type: string
+            format: date
+            example: '2026-09-14'
+      responses:
+        '200':
+          description: Exchange rate details
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - rate
+                  - date
+                properties:
+                  rate:
+                    type: number
+                    format: float
+                    description: Multiplier to convert from 'from' currency to 'to' currency
+                    example: 0.92
+                  date:
+                    type: string
+                    format: date
+                    description: Effective date of the rate
+                    example: '2026-09-14'
+        '400':
+          description: Invalid currency parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    CurrencyCode:
+      type: string
+      enum:
+        - EUR
+        - USD
+        - GBP
+        - JPY
+        - CAD
+        - CHF
+        - AUD
+      example: EUR
+
+    SplitType:
+      type: string
+      enum:
+        - EQUAL
+        - EXACT
+        - PERCENTAGE
+        - SHARES
+      example: EQUAL
+
+    Participant:
+      type: object
+      required:
+        - id
+        - eventId
+        - name
+        - avatarColor
+        - createdAt
+      properties:
+        id:
+          type: string
+          example: p-alex
+        eventId:
+          type: string
+          example: barcelona-2026
+        name:
+          type: string
+          example: Alex
+        avatarColor:
+          type: string
+          example: '#6366f1'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-09-14T08:00:00Z'
+
+    SplitAllocation:
+      type: object
+      required:
+        - participantId
+        - computedBaseAmount
+      properties:
+        participantId:
+          type: string
+          example: p-alex
+        amount:
+          type: number
+          format: float
+          description: For exact amount splits
+          example: 25.50
+        percentage:
+          type: number
+          format: float
+          description: For percentage splits (0 - 100)
+          example: 50
+        shares:
+          type: number
+          format: float
+          description: For share-based splits
+          example: 2
+        computedBaseAmount:
+          type: number
+          format: float
+          description: Calculated share converted to event base currency
+          example: 25.50
+
+    LineItem:
+      type: object
+      required:
+        - id
+        - title
+        - amount
+        - consumerIds
+      properties:
+        id:
+          type: string
+          example: li-1
+        title:
+          type: string
+          example: Tapas Platter
+        amount:
+          type: number
+          format: float
+          example: 32.00
+        consumerIds:
+          type: array
+          items:
+            type: string
+          example:
+            - p-alex
+            - p-sarah
+
+    Expense:
+      type: object
+      required:
+        - id
+        - eventId
+        - payerId
+        - description
+        - originalAmount
+        - originalCurrency
+        - exchangeRate
+        - baseAmount
+        - isItemized
+        - date
+        - createdAt
+        - updatedAt
+        - splits
+      properties:
+        id:
+          type: string
+          example: exp-101
+        eventId:
+          type: string
+          example: barcelona-2026
+        payerId:
+          type: string
+          example: p-alex
+        description:
+          type: string
+          example: Team Dinner
+        originalAmount:
+          type: number
+          format: float
+          example: 84.50
+        originalCurrency:
+          $ref: '#/components/schemas/CurrencyCode'
+        exchangeRate:
+          type: number
+          format: float
+          description: Rate to convert original currency to base currency
+          example: 1.0
+        baseAmount:
+          type: number
+          format: float
+          description: Total converted to event base currency
+          example: 84.50
+        isItemized:
+          type: boolean
+          example: false
+        category:
+          type: string
+          example: Food & Drinks
+        date:
+          type: string
+          format: date-time
+          example: '2026-09-14T19:30:00Z'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-09-14T19:35:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-09-14T19:35:00Z'
+        splits:
+          type: array
+          items:
+            $ref: '#/components/schemas/SplitAllocation'
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItem'
+        taxAmount:
+          type: number
+          format: float
+          example: 5.00
+        tipAmount:
+          type: number
+          format: float
+          example: 10.00
+
+    Settlement:
+      type: object
+      required:
+        - id
+        - eventId
+        - fromParticipantId
+        - toParticipantId
+        - amount
+        - currency
+        - date
+        - createdAt
+      properties:
+        id:
+          type: string
+          example: set-201
+        eventId:
+          type: string
+          example: barcelona-2026
+        fromParticipantId:
+          type: string
+          example: p-sarah
+        toParticipantId:
+          type: string
+          example: p-alex
+        amount:
+          type: number
+          format: float
+          example: 42.25
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        date:
+          type: string
+          format: date-time
+          example: '2026-09-14T20:00:00Z'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-09-14T20:00:00Z'
+
+    ActivityLog:
+      type: object
+      required:
+        - id
+        - eventId
+        - actorId
+        - action
+        - details
+        - createdAt
+      properties:
+        id:
+          type: string
+          example: act-301
+        eventId:
+          type: string
+          example: barcelona-2026
+        actorId:
+          type: string
+          example: p-alex
+        action:
+          type: string
+          enum:
+            - EVENT_CREATED
+            - PARTICIPANT_ADDED
+            - EXPENSE_CREATED
+            - EXPENSE_UPDATED
+            - EXPENSE_DELETED
+            - SETTLEMENT_RECORDED
+          example: EXPENSE_CREATED
+        details:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-09-14T19:35:00Z'
+
+    EventData:
+      type: object
+      required:
+        - id
+        - title
+        - baseCurrency
+        - createdAt
+        - participants
+        - expenses
+        - settlements
+        - activityLogs
+      properties:
+        id:
+          type: string
+          example: barcelona-2026
+        title:
+          type: string
+          example: Barcelona Trip 2026
+        baseCurrency:
+          $ref: '#/components/schemas/CurrencyCode'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-09-14T08:00:00Z'
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+        expenses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expense'
+        settlements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Settlement'
+        activityLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityLog'
+
+    CreateEventInput:
+      type: object
+      required:
+        - title
+        - baseCurrency
+        - creatorName
+        - initialParticipants
+      properties:
+        title:
+          type: string
+          example: Barcelona Trip 2026
+        baseCurrency:
+          $ref: '#/components/schemas/CurrencyCode'
+        creatorName:
+          type: string
+          example: Alex
+        initialParticipants:
+          type: array
+          items:
+            type: string
+          example:
+            - Sarah
+            - Max
+
+    CreateExpenseInput:
+      type: object
+      required:
+        - eventId
+        - payerId
+        - description
+        - originalAmount
+        - originalCurrency
+        - isItemized
+      properties:
+        eventId:
+          type: string
+          example: barcelona-2026
+        payerId:
+          type: string
+          example: p-alex
+        description:
+          type: string
+          example: Team Dinner
+        originalAmount:
+          type: number
+          format: float
+          example: 84.50
+        originalCurrency:
+          $ref: '#/components/schemas/CurrencyCode'
+        date:
+          type: string
+          format: date-time
+          example: '2026-09-14T19:30:00Z'
+        isItemized:
+          type: boolean
+          example: false
+        splits:
+          type: array
+          items:
+            type: object
+            required:
+              - participantId
+            properties:
+              participantId:
+                type: string
+                example: p-alex
+              amount:
+                type: number
+                format: float
+                example: 42.25
+              percentage:
+                type: number
+                format: float
+                example: 50
+              shares:
+                type: number
+                format: float
+                example: 1
+        splitType:
+          $ref: '#/components/schemas/SplitType'
+        lineItems:
+          type: array
+          items:
+            type: object
+            required:
+              - title
+              - amount
+              - consumerIds
+            properties:
+              title:
+                type: string
+                example: Tapas
+              amount:
+                type: number
+                format: float
+                example: 25.00
+              consumerIds:
+                type: array
+                items:
+                  type: string
+                example:
+                  - p-alex
+                  - p-sarah
+        taxAmount:
+          type: number
+          format: float
+          example: 2.50
+        tipAmount:
+          type: number
+          format: float
+          example: 5.00
+
+    UpdateExpenseInput:
+      type: object
+      properties:
+        eventId:
+          type: string
+          example: barcelona-2026
+        payerId:
+          type: string
+          example: p-alex
+        description:
+          type: string
+          example: Team Dinner (Revised)
+        originalAmount:
+          type: number
+          format: float
+          example: 95.00
+        originalCurrency:
+          $ref: '#/components/schemas/CurrencyCode'
+        date:
+          type: string
+          format: date-time
+          example: '2026-09-14T19:30:00Z'
+        isItemized:
+          type: boolean
+          example: false
+        splits:
+          type: array
+          items:
+            type: object
+            required:
+              - participantId
+            properties:
+              participantId:
+                type: string
+                example: p-alex
+              amount:
+                type: number
+                format: float
+                example: 47.50
+              percentage:
+                type: number
+                format: float
+                example: 50
+              shares:
+                type: number
+                format: float
+                example: 1
+        splitType:
+          $ref: '#/components/schemas/SplitType'
+        lineItems:
+          type: array
+          items:
+            type: object
+            required:
+              - title
+              - amount
+              - consumerIds
+            properties:
+              title:
+                type: string
+                example: Tapas
+              amount:
+                type: number
+                format: float
+                example: 25.00
+              consumerIds:
+                type: array
+                items:
+                  type: string
+        taxAmount:
+          type: number
+          format: float
+          example: 3.00
+        tipAmount:
+          type: number
+          format: float
+          example: 6.00
+
+    CreateSettlementInput:
+      type: object
+      required:
+        - eventId
+        - fromParticipantId
+        - toParticipantId
+        - amount
+      properties:
+        eventId:
+          type: string
+          example: barcelona-2026
+        fromParticipantId:
+          type: string
+          example: p-sarah
+        toParticipantId:
+          type: string
+          example: p-alex
+        amount:
+          type: number
+          format: float
+          example: 42.25
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        date:
+          type: string
+          format: date-time
+          example: '2026-09-14T20:00:00Z'
+
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Event with id "barcelona-2026" not found.

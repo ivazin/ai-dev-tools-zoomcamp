@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Expense, Participant } from '../../types';
 import { formatMoney } from '../../utils/formatters';
 import { Avatar } from '../common/Avatar';
@@ -9,6 +9,7 @@ interface ExpenseDetailDrawerProps {
   participants: Participant[];
   isOpen: boolean;
   onClose: () => void;
+  onEdit: (expense: Expense) => void;
   onDelete: (id: string) => void;
 }
 
@@ -17,6 +18,7 @@ export const ExpenseDetailDrawer: React.FC<ExpenseDetailDrawerProps> = ({
   participants,
   isOpen,
   onClose,
+  onEdit,
   onDelete,
 }) => {
   if (!expense || !isOpen) return null;
@@ -147,8 +149,18 @@ export const ExpenseDetailDrawer: React.FC<ExpenseDetailDrawerProps> = ({
           </div>
         </div>
 
-        {/* Delete Action */}
-        <div style={{ marginTop: '12px' }}>
+        {/* Actions: Edit & Delete */}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => {
+              onEdit(expense);
+              onClose();
+            }}
+          >
+            Edit Expense
+          </button>
           <button
             type="button"
             className="btn-secondary"
@@ -159,12 +171,11 @@ export const ExpenseDetailDrawer: React.FC<ExpenseDetailDrawerProps> = ({
               }
             }}
             style={{
-              width: '100%',
               borderColor: 'var(--danger-border)',
               color: 'var(--danger)',
             }}
           >
-            Delete Expense
+            Delete
           </button>
         </div>
       </div>

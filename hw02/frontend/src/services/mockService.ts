@@ -341,7 +341,39 @@ export class MockApiService implements IApiService {
     targetExp.exchangeRate = exchangeRate;
     targetExp.baseAmount = baseAmount;
     targetExp.payerId = input.payerId || targetExp.payerId;
-    targetExp.updatedAt = now;
+    if (input.isItemized !== undefined) targetExp.isItemized = input.isItemized;
+    if (input.taxAmount !== undefined) targetExp.taxAmount = input.taxAmount;
+    if (input.tipAmount !== undefined) targetExp.tipAmount = input.tipAmount;
+
+    if (input.isItemized && input.lineItems && input.lineItems.length > 0) {
+      targetExp.lineItems = input.lineItems.map((li) => ({
+        id: li.title ? this.generateId('li') : this.generateId('li'),
+        title: li.title,
+        amount: li.amount,
+        consumerIds: li.consumerIds,
+      }));
+      const res = calculateItemizedSplit(
+        targetExp.lineItems,
+        input.taxAmount || 0,
+        input.tipAmount || 0,
+        exchangeRate
+      );
+      targetExp.splits = res.splits;
+    } else if (input.splits && input.splits.length > 0) {
+      targetExp.splits = input.splits.map((s) => ({
+        participantId: s.participantId,
+        amount: s.amount,
+        percentage: s.percentage,
+        shares: s.shares,
+        computedBaseAmount: Math.round((s.amount || 0) * exchangeRate * 100) / 100,
+      }));
+    } else if (input.originalAmount !== undefined) {
+      // Recompute equal split by default if amount changed and no custom splits given
+      const participantIds = targetExp.splits.length > 0
+        ? targetExp.splits.map((s) => s.participantId)
+        : targetEvent.participants.map((p) => p.id);
+      targetExp.splits = calculateEqualSplit(baseAmount, participantIds);
+    }
 
     targetEvent.activityLogs.unshift({
       id: this.generateId('act'),

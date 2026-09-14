@@ -11,6 +11,7 @@ export const ExpensesTab: React.FC = () => {
   const { event, activeParticipant, deleteExpense, lastUpdatedItemId } = useEvent();
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   if (!event) return null;
@@ -26,6 +27,16 @@ export const ExpensesTab: React.FC = () => {
   const filteredExpenses = event.expenses.filter((exp) =>
     exp.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleOpenCreate = () => {
+    setExpenseToEdit(null);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenEdit = (expense: Expense) => {
+    setExpenseToEdit(expense);
+    setIsFormOpen(true);
+  };
 
   return (
     <div className="tab-content">
@@ -100,7 +111,7 @@ export const ExpensesTab: React.FC = () => {
       {/* Sticky Floating Action Button */}
       <button
         className="fab-add"
-        onClick={() => setIsFormOpen(true)}
+        onClick={handleOpenCreate}
         aria-label="Add Expense"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -110,22 +121,27 @@ export const ExpensesTab: React.FC = () => {
         <span>Add Expense</span>
       </button>
 
-      {/* Expense Detail Drawer */}
+      {/* Expense Detail Drawer with Edit & Delete actions */}
       <ExpenseDetailDrawer
         expense={selectedExpense}
         participants={event.participants}
         isOpen={Boolean(selectedExpense)}
         onClose={() => setSelectedExpense(null)}
+        onEdit={handleOpenEdit}
         onDelete={deleteExpense}
       />
 
-      {/* Expense Creation Form Modal */}
+      {/* Expense Form Modal (Create & Edit) */}
       <ExpenseFormModal
         isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+        onClose={() => {
+          setIsFormOpen(false);
+          setExpenseToEdit(null);
+        }}
         participants={event.participants}
         baseCurrency={event.baseCurrency}
         defaultPayerId={activeParticipant?.id}
+        expenseToEdit={expenseToEdit}
       />
     </div>
   );

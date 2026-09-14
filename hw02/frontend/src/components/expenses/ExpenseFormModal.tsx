@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CurrencyCode, Participant, LineItem } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { CurrencyCode, Participant, LineItem, Expense } from '../../types';
 import { calculateExchangeRate } from '../../services/currencyRates';
 import { useEvent } from '../../context/EventContext';
 import { Modal } from '../common/Modal';
@@ -13,6 +13,7 @@ interface ExpenseFormModalProps {
   participants: Participant[];
   baseCurrency: CurrencyCode;
   defaultPayerId?: string;
+  expenseToEdit?: Expense | null;
 }
 
 export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
@@ -21,8 +22,9 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   participants,
   baseCurrency,
   defaultPayerId,
+  expenseToEdit,
 }) => {
-  const { createExpense } = useEvent();
+  const { createExpense, updateExpense } = useEvent();
   const [activeTab, setActiveTab] = useState<'quick' | 'itemized'>('quick');
 
   const [description, setDescription] = useState('');
@@ -33,6 +35,7 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
 
   // Quick split state
   const [splits, setSplits] = useState<Array<{ participantId: string; amount?: number; shares?: number }>>([]);
+  const [isQuickSplitValid, setIsQuickSplitValid] = useState(true);
 
   // Itemized state
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
@@ -40,6 +43,44 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   const [tip, setTip] = useState(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Populate form fields when editing an existing expense or opening fresh
+  useEffect(() => {
+    if (expenseToEdit) {
+      setDescription(expenseToEdit.description);
+      setAmount(expenseToEdit.originalAmount);
+      setCurrency(expenseToEdit.originalCurrency);
+      setPayerId(expenseToEdit.payerId);
+      setDate(expenseToEdit.date ? expenseToEdit.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+      setActiveTab(expenseToEdit.isItemized ? 'itemized' : 'quick');
+
+      if (expenseToEdit.isItemized && expenseToEdit.lineItems) {
+        setLineItems(expenseToEdit.lineItems);
+        setTax(expenseToEdit.taxAmount || 0);
+        setTip(expenseToEdit.tipAmount || 0);
+      } else {
+        setSplits(
+          expenseToEdit.splits.map((s) => ({
+            participantId: s.participantId,
+            amount: s.amount !== undefined ? s.amount : s.computedBaseAmount,
+            shares: s.shares,
+          }))
+        );
+      }
+    } else {
+      setDescription('');
+      setAmount(0);
+      setCurrency(baseCurrency);
+      setPayerId(defaultPayerId || participants[0]?.id || '');
+      setDate(new Date().toISOString().split('T')[0]);
+      setActiveTab('quick');
+      setLineItems([]);
+      setTax(0);
+      setTip(0);
+      setSplits([]);
+      setIsQuickSplitValid(true);
+    }
+  }, [expenseToEdit, isOpen, baseCurrency, defaultPayerId, participants]);
 
   if (!isOpen) return null;
 
@@ -50,36 +91,70 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
     : lineItems.reduce((sum, item) => sum + (item.amount || 0), 0) + tax + tip;
   const convertedBaseAmount = Math.round(effectiveTotal * exchangeRate * 100) / 100;
 
+  const isFormValid = Boolean(
+    description.trim() &&
+    effectiveTotal > 0 &&
+    (activeTab === 'itemized' || isQuickSplitValid)
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description.trim() || effectiveTotal <= 0) return;
+    if (!isFormValid || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      if (activeTab === 'quick') {
-        await createExpense({
-          eventId: participants[0]?.eventId || '',
-          payerId,
-          description: description.trim(),
-          originalAmount: effectiveTotal,
-          originalCurrency: currency,
-          isItemized: false,
-          date: new Date(date).toISOString(),
-          splits,
-        });
+      if (expenseToEdit) {
+        // Edit mode
+        if (activeTab === 'quick') {
+          await updateExpense(expenseToEdit.id, {
+            payerId,
+            description: description.trim(),
+            originalAmount: effectiveTotal,
+            originalCurrency: currency,
+            isItemized: false,
+            date: new Date(date).toISOString(),
+            splits,
+          });
+        } else {
+          await updateExpense(expenseToEdit.id, {
+            payerId,
+            description: description.trim(),
+            originalAmount: effectiveTotal,
+            originalCurrency: currency,
+            isItemized: true,
+            date: new Date(date).toISOString(),
+            lineItems,
+            taxAmount: tax,
+            tipAmount: tip,
+          });
+        }
       } else {
-        await createExpense({
-          eventId: participants[0]?.eventId || '',
-          payerId,
-          description: description.trim(),
-          originalAmount: effectiveTotal,
-          originalCurrency: currency,
-          isItemized: true,
-          date: new Date(date).toISOString(),
-          lineItems,
-          taxAmount: tax,
-          tipAmount: tip,
-        });
+        // Create mode
+        if (activeTab === 'quick') {
+          await createExpense({
+            eventId: participants[0]?.eventId || '',
+            payerId,
+            description: description.trim(),
+            originalAmount: effectiveTotal,
+            originalCurrency: currency,
+            isItemized: false,
+            date: new Date(date).toISOString(),
+            splits,
+          });
+        } else {
+          await createExpense({
+            eventId: participants[0]?.eventId || '',
+            payerId,
+            description: description.trim(),
+            originalAmount: effectiveTotal,
+            originalCurrency: currency,
+            isItemized: true,
+            date: new Date(date).toISOString(),
+            lineItems,
+            taxAmount: tax,
+            tipAmount: tip,
+          });
+        }
       }
       onClose();
     } finally {
@@ -88,7 +163,11 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add New Expense">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={expenseToEdit ? 'Edit Expense' : 'Add New Expense'}
+    >
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Top Segmented Mode Switcher */}
         <div className="segmented-control">
@@ -211,7 +290,11 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           <QuickSplitForm
             totalAmount={amount}
             participants={participants}
-            onSplitsCalculated={setSplits}
+            initialSplits={expenseToEdit?.splits}
+            onSplitsCalculated={(calculatedSplits, isValid) => {
+              setSplits(calculatedSplits);
+              setIsQuickSplitValid(isValid);
+            }}
           />
         ) : (
           <ItemizedReceiptForm
@@ -229,10 +312,14 @@ export const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({
           <button
             type="submit"
             className="btn-primary"
-            disabled={!description.trim() || effectiveTotal <= 0 || isSubmitting}
+            disabled={!isFormValid || isSubmitting}
             style={{ width: '100%' }}
           >
-            {isSubmitting ? 'Saving Expense...' : 'Save Expense'}
+            {isSubmitting
+              ? 'Saving Expense...'
+              : expenseToEdit
+              ? 'Save Changes'
+              : 'Save Expense'}
           </button>
         </div>
       </form>

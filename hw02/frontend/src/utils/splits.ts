@@ -39,6 +39,35 @@ export function calculateExactSplit(
   }));
 }
 
+export interface ExactSplitValidation {
+  totalAllocated: number;
+  remainingAmount: number;
+  isValid: boolean;
+  difference: number;
+}
+
+/**
+ * Validates whether the exact allocations match the total amount within a cent.
+ */
+export function validateExactSplit(
+  totalAmount: number,
+  exacts: Record<string, number>
+): ExactSplitValidation {
+  const totalCents = Math.round(totalAmount * 100);
+  const allocatedCents = Object.values(exacts).reduce(
+    (sum, val) => sum + (isNaN(val) ? 0 : Math.round(val * 100)),
+    0
+  );
+  const diffCents = totalCents - allocatedCents;
+
+  return {
+    totalAllocated: allocatedCents / 100,
+    remainingAmount: Math.round(diffCents) / 100,
+    isValid: Math.abs(diffCents) === 0,
+    difference: diffCents / 100,
+  };
+}
+
 /**
  * Split by percentage or shares.
  */

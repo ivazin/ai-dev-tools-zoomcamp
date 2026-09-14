@@ -74,4 +74,27 @@ describe('Centralized Mock Service Layer', () => {
     const updatedEvent = await service.getEvent('barcelona-trip-2026');
     expect(updatedEvent.settlements.some((s) => s.id === settlement.id)).toBe(true);
   });
+
+  it('updates an existing expense and records an activity log entry', async () => {
+    const event = await service.getEvent('barcelona-trip-2026');
+    const expToUpdate = event.expenses[0];
+
+    const updated = await service.updateExpense(expToUpdate.id, {
+      description: 'Updated Airbnb Luxury Villa',
+      originalAmount: 520,
+      originalCurrency: 'EUR',
+    });
+
+    expect(updated.id).toBe(expToUpdate.id);
+    expect(updated.description).toBe('Updated Airbnb Luxury Villa');
+    expect(updated.baseAmount).toBe(520);
+
+    const refreshedEvent = await service.getEvent('barcelona-trip-2026');
+    const matched = refreshedEvent.expenses.find((e) => e.id === expToUpdate.id);
+    expect(matched?.description).toBe('Updated Airbnb Luxury Villa');
+
+    const latestLog = refreshedEvent.activityLogs[0];
+    expect(latestLog.action).toBe('EXPENSE_UPDATED');
+    expect(latestLog.details.description).toBe('Updated Airbnb Luxury Villa');
+  });
 });

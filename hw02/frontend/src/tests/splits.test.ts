@@ -4,6 +4,7 @@ import {
   calculateExactSplit,
   calculateSharesSplit,
   calculateItemizedSplit,
+  validateExactSplit,
 } from '../utils/splits';
 import { LineItem } from '../types';
 
@@ -33,13 +34,6 @@ describe('Split Calculation Engine', () => {
   });
 
   it('calculates itemized receipts and distributes tax & tip proportionally', () => {
-    // Line 1: Steak 40 EUR consumed by Alice
-    // Line 2: Salad 10 EUR consumed by Bob
-    // Subtotal: 50 EUR. Alice ratio: 40/50 = 80%, Bob ratio: 10/50 = 20%
-    // Tax: 5 EUR, Tip: 5 EUR (Total extra: 10 EUR)
-    // Alice extra: 8 EUR => Total Alice: 48 EUR
-    // Bob extra: 2 EUR => Total Bob: 12 EUR
-    // Grand total: 60 EUR
     const lineItems: LineItem[] = [
       { id: '1', title: 'Steak', amount: 40, consumerIds: ['alice'] },
       { id: '2', title: 'Salad', amount: 10, consumerIds: ['bob'] },
@@ -56,5 +50,41 @@ describe('Split Calculation Engine', () => {
 
     expect(aliceSplit?.computedBaseAmount).toBe(48);
     expect(bobSplit?.computedBaseAmount).toBe(12);
+  });
+
+  describe('Exact Split Validation & Assistance', () => {
+    it('validates exact match correctly', () => {
+      const result = validateExactSplit(100, {
+        p1: 60,
+        p2: 40,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.totalAllocated).toBe(100);
+      expect(result.remainingAmount).toBe(0);
+      expect(result.difference).toBe(0);
+    });
+
+    it('detects under-allocated exact sums and indicates remaining amount', () => {
+      const result = validateExactSplit(100, {
+        p1: 45.5,
+        p2: 20,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.totalAllocated).toBe(65.5);
+      expect(result.remainingAmount).toBe(34.5);
+    });
+
+    it('detects over-allocated exact sums', () => {
+      const result = validateExactSplit(50, {
+        p1: 30,
+        p2: 25,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.totalAllocated).toBe(55);
+      expect(result.remainingAmount).toBe(-5);
+    });
   });
 });

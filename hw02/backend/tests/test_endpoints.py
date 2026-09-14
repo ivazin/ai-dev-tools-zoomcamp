@@ -278,3 +278,111 @@ async def test_health_probes():
         ready = await client.get("/api/health/ready")
         assert ready.status_code == 200
         assert ready.json() == {"status": "ready"}
+
+
+@pytest.mark.asyncio
+async def test_update_expense_exact_split():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_res = await client.post("/api/events", json={
+            "title": "Exact Split Update Test",
+            "baseCurrency": "EUR",
+            "creatorName": "Alice",
+            "initialParticipants": ["Bob"]
+        })
+        event = create_res.json()
+        event_id = event["id"]
+        alice_id = next(p["id"] for p in event["participants"] if p["name"] == "Alice")
+        bob_id = next(p["id"] for p in event["participants"] if p["name"] == "Bob")
+
+        # Create initially as equal
+        exp_res = await client.post(f"/api/events/{event_id}/expenses", json={
+            "eventId": event_id,
+            "payerId": alice_id,
+            "description": "Taxi",
+            "originalAmount": 30.0,
+            "originalCurrency": "EUR",
+            "isItemized": False,
+            "splitType": "EQUAL",
+            "splits": [{"participantId": alice_id}, {"participantId": bob_id}]
+        })
+        expense_id = exp_res.json()["id"]
+
+        # Update to EXACT split (Alice: 10 EUR, Bob: 20 EUR)
+        update_res = await client.put(f"/api/expenses/{expense_id}", json={
+            "description": "Taxi (Exact)",
+            "originalAmount": 30.0,
+            "originalCurrency": "EUR",
+            "splitType": "EXACT",
+            "splits": [
+                {"participantId": alice_id, "amount": 10.0},
+                {"participantId": bob_id, "amount": 20.0}
+            ]
+        })
+        assert update_res.status_code == 200
+        updated = update_res.json()
+        alice_sp = next(s for s in updated["splits"] if s["participantId"] == alice_id)
+        bob_sp = next(s for s in updated["splits"] if s["participantId"] == bob_id)
+        assert alice_sp["computedBaseAmount"] == 10.0
+        assert bob_sp["computedBaseAmount"] == 20.0
+
+
+@pytest.mark.asyncio
+async def test_multicurrency_expense_and_rate_conversion():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create event with base currency EUR
+        create_res = await client.post("/api/events", json={
+            "title": "US Trip",
+            "baseCurrency": "EUR",
+            "creatorName": "Alice",
+            "initialParticipants": ["Bob"]
+        })
+        event = create_res.json()
+        event_id = event["id"]
+        alice_id = next(p["id"] for p in event["participants"] if p["name"] == "Alice")
+        bob_id = next(p["id"] for p in event["participants"] if p["name"] == "Bob")
+
+        # Create expense in USD: 100 USD (USD -> EUR rate is 0.92) -> baseAmount = 92.0 EUR
+        exp_res = await client.post(f"/api/events/{event_id}/expenses", json={
+            "eventId": event_id,
+            "payerId": alice_id,
+            "description": "Hotel NYC",
+            "originalAmount": 100.0,
+            "originalCurrency": "USD",
+            "isItemized": False,
+            "splitType": "EQUAL",
+            "splits": [{"participantId": alice_id}, {"participantId": bob_id}]
+        })
+        assert exp_res.status_code in (200, 201)
+        exp = exp_res.json()
+        assert exp["originalAmount"] == 100.0
+        assert exp["originalCurrency"] == "USD"
+        assert exp["baseAmount"] == 92.0
+        assert exp["exchangeRate"] == 0.92
+        assert exp["splits"][0]["computedBaseAmount"] == 46.0
+        assert exp["splits"][1]["computedBaseAmount"] == 46.0
+
+
+@pytest.mark.asyncio
+async def test_not_found_handling():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Non-existent expense update
+        res = await client.put("/api/expenses/nonexistent-999", json={
+            "description": "Ghost",
+            "originalAmount": 10.0,
+        })
+        assert res.status_code == 404
+        assert "not found" in res.json()["message"].lower()
+
+        # Non-existent expense delete
+        del_res = await client.request(
+            "DELETE",
+            "/api/events/ev-123/expenses/exp-999",
+            json={"actorId": "p-1"}
+        )
+        assert del_res.status_code == 404
+        assert "not found" in del_res.json()["message"].lower()
+
+

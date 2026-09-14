@@ -33,6 +33,7 @@ from app.schemas import (
     CreateSettlementInput,
     SplitType,
 )
+from app.services.split_calculator import compute_expense_splits
 
 
 def now_iso() -> str:
@@ -526,76 +527,17 @@ class SqliteDatabase:
         created_at = now_iso()
         expense_id = f"exp-{uuid.uuid4().hex[:8]}"
 
-        splits: List[SplitAllocation] = []
-        if input_data.isItemized and input_data.lineItems:
-            subtotal = sum(item.amount for item in input_data.lineItems)
-            tax = input_data.taxAmount or 0.0
-            tip = input_data.tipAmount or 0.0
-            participant_shares: Dict[str, float] = {}
-
-            for item in input_data.lineItems:
-                if item.consumerIds:
-                    share = item.amount / len(item.consumerIds)
-                    for cid in item.consumerIds:
-                        participant_shares[cid] = participant_shares.get(cid, 0.0) + share
-
-            for cid, raw_share in participant_shares.items():
-                ratio = (raw_share / subtotal) if subtotal > 0 else 0
-                itemized_orig = raw_share + (tax + tip) * ratio
-                comp_base = round(itemized_orig * rate, 2)
-                splits.append(
-                    SplitAllocation(
-                        participantId=cid,
-                        amount=round(itemized_orig, 2),
-                        computedBaseAmount=comp_base,
-                    )
-                )
-        else:
-            raw_splits = input_data.splits or []
-            if not raw_splits:
-                raw_splits = [type("SplitTmp", (), {"participantId": p.id, "amount": None, "percentage": None, "shares": None}) for p in event.participants]
-
-            split_type = input_data.splitType or SplitType.EQUAL
-            if split_type == SplitType.EQUAL:
-                equal_base = round(base_amount / len(raw_splits), 2) if raw_splits else 0.0
-                for s in raw_splits:
-                    splits.append(
-                        SplitAllocation(
-                            participantId=s.participantId,
-                            computedBaseAmount=equal_base,
-                        )
-                    )
-            elif split_type == SplitType.EXACT:
-                for s in raw_splits:
-                    amt = s.amount or 0.0
-                    splits.append(
-                        SplitAllocation(
-                            participantId=s.participantId,
-                            amount=amt,
-                            computedBaseAmount=round(amt * rate, 2),
-                        )
-                    )
-            elif split_type == SplitType.PERCENTAGE:
-                for s in raw_splits:
-                    pct = s.percentage or 0.0
-                    splits.append(
-                        SplitAllocation(
-                            participantId=s.participantId,
-                            percentage=pct,
-                            computedBaseAmount=round(base_amount * (pct / 100.0), 2),
-                        )
-                    )
-            elif split_type == SplitType.SHARES:
-                total_shares = sum(s.shares or 1.0 for s in raw_splits) or 1.0
-                for s in raw_splits:
-                    sh = s.shares or 1.0
-                    splits.append(
-                        SplitAllocation(
-                            participantId=s.participantId,
-                            shares=sh,
-                            computedBaseAmount=round(base_amount * (sh / total_shares), 2),
-                        )
-                    )
+        splits = compute_expense_splits(
+            base_amount=base_amount,
+            exchange_rate=rate,
+            is_itemized=input_data.isItemized,
+            split_type=input_data.splitType,
+            splits=input_data.splits,
+            line_items=input_data.lineItems,
+            tax_amount=input_data.taxAmount,
+            tip_amount=input_data.tipAmount,
+            fallback_participant_ids=[p.id for p in event.participants],
+        )
 
         line_items_data: Optional[List[LineItem]] = None
         if input_data.lineItems:
@@ -734,17 +676,29 @@ class SqliteDatabase:
             exp.tax_amount = tax_amount
             exp.tip_amount = tip_amount
 
-            # Update splits if provided
-            if input_data.splits:
+            # Update splits if provided or if items/amount changed
+            if input_data.splits or (input_data.lineItems and is_itemized):
                 session.query(ExpenseSplitModel).filter(ExpenseSplitModel.expense_id == expense_id).delete()
-                equal_base = round(base_amt / len(input_data.splits), 2)
-                for s in input_data.splits:
+                new_splits = compute_expense_splits(
+                    base_amount=base_amt,
+                    exchange_rate=rate,
+                    is_itemized=is_itemized,
+                    split_type=input_data.splitType,
+                    splits=input_data.splits,
+                    line_items=input_data.lineItems,
+                    tax_amount=tax_amount,
+                    tip_amount=tip_amount,
+                )
+                for s in new_splits:
                     session.add(
                         ExpenseSplitModel(
                             id=f"sp-{uuid.uuid4().hex[:8]}",
                             expense_id=expense_id,
                             participant_id=s.participantId,
-                            computed_base_amount=equal_base,
+                            amount=s.amount,
+                            percentage=s.percentage,
+                            shares=s.shares,
+                            computed_base_amount=s.computedBaseAmount,
                         )
                     )
 

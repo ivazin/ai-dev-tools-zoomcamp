@@ -15,6 +15,6 @@ npm run build
 architecture & guidelines:
 - frontend runs completely standalone via a centralized mock service layer (see `frontend/src/services/mockService.ts` and `frontend/src/services/index.ts`).
 - to point the frontend to a real backend, set `VITE_USE_MOCK=false` and provide `VITE_API_BASE_URL` / `VITE_WS_BASE_URL`.
-- specs and functional requirements are located in `_docs/specs.md` and `_docs/frontend_specs.md`.
+- specs and functional requirements are located in `_docs/specs.md`, `_docs/frontend_specs.md`, and `_docs/backend_specs.md`.
 
 regularly commit code to git 

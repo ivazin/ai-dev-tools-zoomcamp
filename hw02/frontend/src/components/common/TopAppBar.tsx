@@ -5,11 +5,21 @@ import { Modal } from './Modal';
 
 interface TopAppBarProps {
   onOpenShare: () => void;
+  onOpenCreateEvent: () => void;
 }
 
-export const TopAppBar: React.FC<TopAppBarProps> = ({ onOpenShare }) => {
-  const { event, activeParticipant, onlineParticipantIds, setActiveParticipant, isMock } = useEvent();
+export const TopAppBar: React.FC<TopAppBarProps> = ({ onOpenShare, onOpenCreateEvent }) => {
+  const {
+    event,
+    recentEvents,
+    activeParticipant,
+    onlineParticipantIds,
+    setActiveParticipant,
+    switchEvent,
+    isMock,
+  } = useEvent();
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
+  const [showEventDrawer, setShowEventDrawer] = useState(false);
 
   if (!event) return null;
 
@@ -17,9 +27,37 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({ onOpenShare }) => {
     <>
       <header className="app-header">
         <div className="header-left">
-          <div className="event-title-badge">
+          {/* Clickable Event Selector */}
+          <button
+            className="event-title-badge"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px 6px',
+              borderRadius: 'var(--radius-md)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              textAlign: 'left',
+              transition: 'background 0.2s',
+            }}
+            onClick={() => setShowEventDrawer(true)}
+            title="Click to switch or create events"
+          >
             <span>{event.title}</span>
             <span className="currency-tag">{event.baseCurrency}</span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              style={{ opacity: 0.7 }}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
             {isMock && (
               <span
                 style={{
@@ -35,10 +73,23 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({ onOpenShare }) => {
                 MOCK
               </span>
             )}
-          </div>
+          </button>
         </div>
 
         <div className="header-actions">
+          {/* Quick Create Event Button */}
+          <button
+            className="icon-btn"
+            onClick={onOpenCreateEvent}
+            title="Create a new event"
+            aria-label="Create Event"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+
           {/* Active Online Presence Avatars */}
           <div className="presence-cluster" title="Online participants">
             {event.participants
@@ -96,6 +147,80 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({ onOpenShare }) => {
           )}
         </div>
       </header>
+
+      {/* Events Switcher Modal */}
+      <Modal
+        isOpen={showEventDrawer}
+        onClose={() => setShowEventDrawer(false)}
+        title="Events"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <button
+            className="btn-primary"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            onClick={() => {
+              setShowEventDrawer(false);
+              onOpenCreateEvent();
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Create New Event</span>
+          </button>
+
+          {recentEvents.length > 0 && (
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Recent Events
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {recentEvents.map((e) => {
+                  const isCurrent = e.id === event.id;
+                  return (
+                    <button
+                      key={e.id}
+                      className="card-item"
+                      style={{
+                        borderColor: isCurrent ? 'var(--accent-primary)' : undefined,
+                        background: isCurrent ? 'rgba(99, 102, 241, 0.15)' : undefined,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                      onClick={() => {
+                        if (!isCurrent) {
+                          switchEvent(e.id);
+                        }
+                        setShowEventDrawer(false);
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{e.title}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Currency: {e.baseCurrency}
+                        </div>
+                      </div>
+                      {isCurrent ? (
+                        <span style={{ color: 'var(--accent-primary)', fontSize: '0.82rem', fontWeight: 600 }}>
+                          Current ✓
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                          Switch →
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Profile Switcher Modal */}
       <Modal

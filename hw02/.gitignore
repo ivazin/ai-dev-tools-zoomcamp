@@ -6,7 +6,16 @@ Thumbs.db
 *.swp
 *.swo
 
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
 # Environment variables & secrets
+.env.local
 .env
 .env.*
 !.env.example

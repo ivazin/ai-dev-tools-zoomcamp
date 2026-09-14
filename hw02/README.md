@@ -1,4 +1,4 @@
-# SplitWave ⚡
+# Tavli ⚡
 
 > Zero-friction, mobile-first Progressive Web Application (PWA) for collaborative expense tracking, dish-by-dish itemized bill breakdowns, and debt settlement without account registration.
 
@@ -21,6 +21,26 @@
 ---
 
 ## 🚀 Quick Start
+
+### Using Make (Recommended)
+
+Run everything from the project root using the unified [Makefile](file:///Users/user/Documents/Python/ai-dev-tools-zoomcamp-2026-hw02/Makefile):
+
+```bash
+# Install dependencies for both backend and frontend
+make install
+
+# Run full checks (backend pytest, frontend tests, linting, and build)
+make check
+
+# Run backend & frontend concurrently in development mode
+make dev
+
+# Or run tests specifically
+make test
+```
+
+---
 
 ### 1. Frontend (Standalone with Mock Backend)
 

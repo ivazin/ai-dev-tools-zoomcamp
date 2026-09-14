@@ -20,7 +20,7 @@ import { calculateExchangeRate } from './currencyRates';
 import { calculateEqualSplit, calculateItemizedSplit } from '../utils/splits';
 import { generateColor } from '../utils/formatters';
 
-const STORAGE_KEY = 'splitwave_events_store_v1';
+const STORAGE_KEY = 'tavli_events_store_v1';
 
 class MockRealtimeService implements IRealtimeService {
   private subscribers = new Set<RealtimeSubscriber>();

@@ -43,7 +43,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, eventTi
       try {
         await navigator.share({
           title: eventTitle,
-          text: `Join "${eventTitle}" on SplitWave to split expenses!`,
+          text: `Join "${eventTitle}" on Tavli to split expenses!`,
           url: shareUrl,
         });
       } catch {

@@ -1,8 +1,8 @@
-for backend, use uv for dependency management. A few useful commands:
-
+cd backend
 uv sync
 uv add <PACKAGE-NAME>
-uv run python <PYTHON-FILE>
+uv run pytest
+uv run uvicorn app.main:app --reload --reload-dir app --port 8000
 
 for frontend, use npm for dependency management and scripts. Useful commands:
 

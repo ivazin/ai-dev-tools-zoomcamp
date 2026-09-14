@@ -35,14 +35,12 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onCl
 
     setIsSubmitting(true);
     try {
-      const newEventId = await createEvent({
+      await createEvent({
         title: title.trim(),
         baseCurrency,
         creatorName: creatorName.trim(),
         initialParticipants: participants,
       });
-      // Update browser URL query or hash for route tracking
-      window.history.pushState({}, '', `?eventId=${newEventId}`);
       onClose();
     } finally {
       setIsSubmitting(false);

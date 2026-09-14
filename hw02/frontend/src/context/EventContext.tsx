@@ -11,9 +11,17 @@ import {
 } from '../types';
 import services from '../services';
 import { useToast } from './ToastContext';
+import { navigateToEvent } from '../utils/navigation';
+
+export interface RecentEventItem {
+  id: string;
+  title: string;
+  baseCurrency: string;
+}
 
 interface EventContextType {
   event: EventData | null;
+  recentEvents: RecentEventItem[];
   activeParticipant: Participant | null;
   onlineParticipantIds: string[];
   isLoading: boolean;
@@ -21,6 +29,7 @@ interface EventContextType {
   isMock: boolean;
   setActiveParticipant: (p: Participant) => void;
   loadEvent: (eventId: string) => Promise<void>;
+  switchEvent: (eventId: string) => void;
   createEvent: (input: CreateEventInput) => Promise<string>;
   addParticipant: (name: string) => Promise<Participant>;
   createExpense: (input: CreateExpenseInput) => Promise<Expense>;
@@ -32,16 +41,38 @@ interface EventContextType {
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_ACTIVE_USER = 'splitwave_active_user';
+const LOCAL_STORAGE_ACTIVE_USER = 'tavli_active_user';
+const LOCAL_STORAGE_RECENT_EVENTS = 'tavli_recent_events';
 
 export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [event, setEvent] = useState<EventData | null>(null);
+  const [recentEvents, setRecentEvents] = useState<RecentEventItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_RECENT_EVENTS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [activeParticipant, setActiveParticipantState] = useState<Participant | null>(null);
   const [onlineParticipantIds, setOnlineParticipantIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedItemId, setLastUpdatedItemId] = useState<string | null>(null);
   const { showToast } = useToast();
+
+  const recordRecentEvent = useCallback((item: RecentEventItem) => {
+    setRecentEvents((prev) => {
+      const filtered = prev.filter((e) => e.id !== item.id);
+      const updated = [item, ...filtered].slice(0, 8);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_RECENT_EVENTS, JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+      return updated;
+    });
+  }, []);
 
   const setActiveParticipant = useCallback((p: Participant) => {
     setActiveParticipantState(p);
@@ -58,6 +89,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const data = await services.api.getEvent(eventId);
       setEvent(data);
+      recordRecentEvent({ id: data.id, title: data.title, baseCurrency: data.baseCurrency });
 
       // Check saved participant in localStorage
       try {
@@ -67,10 +99,14 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const matched = data.participants.find((p) => p.id === parsed.id);
           if (matched) {
             setActiveParticipantState(matched);
+          } else {
+            setActiveParticipantState(null);
           }
+        } else {
+          setActiveParticipantState(null);
         }
       } catch {
-        // Ignore
+        setActiveParticipantState(null);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load event');
@@ -146,14 +182,21 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [event?.id, activeParticipant?.id, showToast]);
 
+  const switchEvent = useCallback((eventId: string) => {
+    navigateToEvent(eventId);
+    loadEvent(eventId);
+  }, [loadEvent]);
+
   const createEvent = async (input: CreateEventInput): Promise<string> => {
     setIsLoading(true);
     try {
       const newEv = await services.api.createEvent(input);
       setEvent(newEv);
+      recordRecentEvent({ id: newEv.id, title: newEv.title, baseCurrency: newEv.baseCurrency });
       if (newEv.participants.length > 0) {
         setActiveParticipant(newEv.participants[0]);
       }
+      navigateToEvent(newEv.id);
       return newEv.id;
     } finally {
       setIsLoading(false);
@@ -163,13 +206,21 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addParticipant = async (name: string): Promise<Participant> => {
     if (!event) throw new Error('No active event');
     const p = await services.api.addParticipant(event.id, name);
-    setEvent((prev) => prev ? { ...prev, participants: [...prev.participants, p] } : prev);
+    setEvent((prev) => {
+      if (!prev) return prev;
+      if (prev.participants.some((item) => item.id === p.id)) return prev;
+      return { ...prev, participants: [...prev.participants, p] };
+    });
     return p;
   };
 
   const createExpense = async (input: CreateExpenseInput): Promise<Expense> => {
     const exp = await services.api.createExpense(input);
-    setEvent((prev) => prev ? { ...prev, expenses: [exp, ...prev.expenses] } : prev);
+    setEvent((prev) => {
+      if (!prev) return prev;
+      if (prev.expenses.some((e) => e.id === exp.id)) return prev;
+      return { ...prev, expenses: [exp, ...prev.expenses] };
+    });
     return exp;
   };
 
@@ -193,10 +244,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const createSettlement = async (input: CreateSettlementInput): Promise<Settlement> => {
     const set = await services.api.createSettlement(input);
-    setEvent((prev) => prev ? {
-      ...prev,
-      settlements: [set, ...prev.settlements],
-    } : prev);
+    setEvent((prev) => {
+      if (!prev) return prev;
+      if (prev.settlements.some((s) => s.id === set.id)) return prev;
+      return { ...prev, settlements: [set, ...prev.settlements] };
+    });
     return set;
   };
 
@@ -204,6 +256,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <EventContext.Provider
       value={{
         event,
+        recentEvents,
         activeParticipant,
         onlineParticipantIds,
         isLoading,
@@ -211,6 +264,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isMock: services.isMock,
         setActiveParticipant,
         loadEvent,
+        switchEvent,
         createEvent,
         addParticipant,
         createExpense,

@@ -1,1 +1,1 @@
-"""SplitWave Backend Application Package."""
+"""Tavli Backend Application Package."""

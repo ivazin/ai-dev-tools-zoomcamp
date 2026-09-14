@@ -1,8 +1,8 @@
-# Backend Technical Specification: SplitWave API & Real-Time Service
+# Backend Technical Specification: Tavli API & Real-Time Service
 
 ## 1. Executive Summary & Architecture Overview
 
-The SplitWave backend provides the RESTful persistence and real-time collaboration engine for the SplitWave expense splitting application. It is designed to be lightweight, fully asynchronous, stateless, and cloud-native (Kubernetes-ready).
+The Tavli backend provides the RESTful persistence and real-time collaboration engine for the Tavli expense splitting application. It is designed to be lightweight, fully asynchronous, stateless, and cloud-native (Kubernetes-ready).
 
 ### Core Stack
 * **Language & Runtime:** Python 3.12+ managed via `uv`.
@@ -55,7 +55,7 @@ The SplitWave backend provides the RESTful persistence and real-time collaborati
 ### 2.2 Multi-Pod Real-Time Sync (Redis Pub/Sub)
 * When a write mutation (expense creation, update, deletion, settlement) occurs on `Pod A`:
   1. The transaction is committed to PostgreSQL.
-  2. `Pod A` publishes an event envelope to Redis: channel `splitwave:events:{eventId}`.
+  2. `Pod A` publishes an event envelope to Redis: channel `tavli:events:{eventId}`.
   3. All pods (`Pod A`, `Pod B`, ..., `Pod N`) listening to that Redis channel broadcast the message to their local active WebSocket connections in that event room.
 * **Local Fallback:** In local development mode (`REDIS_URL` empty), an in-memory dictionary-based broadcaster is used automatically.
 

@@ -1,12 +1,22 @@
 import pytest
+import tempfile
+import os
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.database import mock_db
+from app.database import SqliteDatabase, get_db
 
 
 @pytest.fixture(autouse=True)
-def reset_db():
-    mock_db.reset()
+def isolated_test_db():
+    # Use isolated temp database for each test so tavli.db is never touched
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        temp_path = f.name
+    test_db = SqliteDatabase(db_path=temp_path)
+    app.dependency_overrides[get_db] = lambda: test_db
+    yield test_db
+    app.dependency_overrides.pop(get_db, None)
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
 
 
 @pytest.mark.asyncio

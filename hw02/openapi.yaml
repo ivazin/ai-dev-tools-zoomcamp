@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: SplitWave Backend API
+  title: Tavli Backend API
   description: >
-    Backend REST API specification expected by the SplitWave frontend
+    Backend REST API specification expected by the Tavli frontend
     (Collaborative Expense Splitter). Designed around zero-friction, capability-based URLs
     where access is governed by the event ID rather than user credentials/passwords.
   version: 1.0.0

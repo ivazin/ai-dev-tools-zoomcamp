@@ -9,7 +9,9 @@ import { ActivityTab } from './components/activity/ActivityTab';
 import { IdentityClaimModal } from './components/onboarding/IdentityClaimModal';
 import { ShareModal } from './components/onboarding/ShareModal';
 import { CreateEventModal } from './components/onboarding/CreateEventModal';
-import { SAMPLE_EVENT } from './services/mockData';
+import { OnboardingView } from './components/onboarding/OnboardingView';
+
+import { getEventIdFromLocation, navigateToHome, navigateToEvent } from './utils/navigation';
 
 const MainApp: React.FC = () => {
   const { event, activeParticipant, loadEvent, isLoading, error } = useEvent();
@@ -17,12 +19,42 @@ const MainApp: React.FC = () => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // Parse event ID from /e/:id or fallback to ?eventId=...
+  const currentEventId = getEventIdFromLocation();
+
   useEffect(() => {
-    // Parse event ID from URL query ?eventId=... or hash or default to seed
-    const params = new URLSearchParams(window.location.search);
-    const eventIdFromQuery = params.get('eventId');
-    loadEvent(eventIdFromQuery || SAMPLE_EVENT.id);
-  }, [loadEvent]);
+    // If URL has an eventId, load it and ensure pretty URL
+    if (currentEventId) {
+      // Normalize legacy /?eventId=... to pretty /e/:id in address bar
+      if (window.location.pathname === '/' && window.location.search.includes('eventId=')) {
+        navigateToEvent(currentEventId);
+      }
+      loadEvent(currentEventId);
+    }
+
+    const handlePopState = () => {
+      const id = getEventIdFromLocation();
+      if (id) {
+        loadEvent(id);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentEventId, loadEvent]);
+
+  // Clean root visit: show friendly Onboarding screen
+  if (!currentEventId && !event) {
+    return (
+      <>
+        <OnboardingView onOpenCreate={() => setIsCreateModalOpen(true)} />
+        <CreateEventModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+        />
+      </>
+    );
+  }
 
   if (isLoading && !event) {
     return (
@@ -35,7 +67,7 @@ const MainApp: React.FC = () => {
           color: 'var(--text-muted)',
         }}
       >
-        Loading SplitWave...
+        Loading Tavli...
       </div>
     );
   }
@@ -49,16 +81,30 @@ const MainApp: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: '100vh',
-          gap: '12px',
+          gap: '16px',
           padding: '24px',
           textAlign: 'center',
         }}
       >
-        <h2 style={{ fontSize: '1.2rem', color: 'var(--danger)' }}>Event Not Found</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{error}</p>
-        <button className="btn-primary" onClick={() => setIsCreateModalOpen(true)}>
-          Create New Event
-        </button>
+        <div style={{ fontSize: '2.5rem' }}>🔍</div>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>Event Not Found</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '360px', margin: '0 auto' }}>
+          We couldn't find this event. It may have expired or the link might be incorrect.
+        </p>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              navigateToHome();
+              window.location.reload();
+            }}
+          >
+            Go to Home
+          </button>
+          <button className="btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+            Create New Event
+          </button>
+        </div>
         <CreateEventModal
           isOpen={isCreateModalOpen}
           onClose={() => setIsCreateModalOpen(false)}
@@ -69,7 +115,10 @@ const MainApp: React.FC = () => {
 
   return (
     <>
-      <TopAppBar onOpenShare={() => setIsShareModalOpen(true)} />
+      <TopAppBar
+        onOpenShare={() => setIsShareModalOpen(true)}
+        onOpenCreateEvent={() => setIsCreateModalOpen(true)}
+      />
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'expenses' && <ExpensesTab />}
@@ -86,7 +135,13 @@ const MainApp: React.FC = () => {
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        eventTitle={event?.title || 'SplitWave Event'}
+        eventTitle={event?.title || 'Tavli Event'}
+      />
+
+      {/* Create New Event Modal */}
+      <CreateEventModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
       />
     </>
   );

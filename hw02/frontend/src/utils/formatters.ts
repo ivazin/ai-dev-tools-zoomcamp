@@ -32,6 +32,46 @@ export function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+export function formatExpenseDate(dateStr: string, createdAt?: string): string {
+  if (!dateStr) return '';
+
+  const now = new Date();
+  const expenseDate = new Date(dateStr);
+
+  // Check if expense date is today (calendar day in local time)
+  const isToday =
+    expenseDate.getFullYear() === now.getFullYear() &&
+    expenseDate.getMonth() === now.getMonth() &&
+    expenseDate.getDate() === now.getDate();
+
+  if (isToday) {
+    // If we have createdAt timestamp that was just created, show relative time
+    if (createdAt) {
+      const createdDate = new Date(createdAt);
+      const diffMs = now.getTime() - createdDate.getTime();
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 60) {
+        return formatRelativeTime(createdAt);
+      }
+    }
+    return 'Today';
+  }
+
+  // Check if yesterday
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday =
+    expenseDate.getFullYear() === yesterday.getFullYear() &&
+    expenseDate.getMonth() === yesterday.getMonth() &&
+    expenseDate.getDate() === yesterday.getDate();
+
+  if (isYesterday) {
+    return 'Yesterday';
+  }
+
+  return expenseDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export function generateColor(name: string): string {
   const colors = [
     '#3B82F6', '#10B981', '#F59E0B', '#EF4444', 

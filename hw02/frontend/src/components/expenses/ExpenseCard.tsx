@@ -1,6 +1,6 @@
 import React from 'react';
 import { Expense, Participant } from '../../types';
-import { formatMoney, formatRelativeTime } from '../../utils/formatters';
+import { formatMoney, formatExpenseDate } from '../../utils/formatters';
 import { Avatar } from '../common/Avatar';
 
 interface ExpenseCardProps {
@@ -53,7 +53,7 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
           </div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
             <span>{isPayer ? 'You paid' : `${payer?.name || 'Someone'} paid`}</span>
-            <span> • {formatRelativeTime(expense.date)}</span>
+            <span> • {formatExpenseDate(expense.date, expense.createdAt)}</span>
           </div>
         </div>
       </div>

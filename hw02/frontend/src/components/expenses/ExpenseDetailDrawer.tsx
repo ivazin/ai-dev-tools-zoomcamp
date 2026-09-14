@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Expense, Participant } from '../../types';
-import { formatMoney } from '../../utils/formatters';
+import { formatMoney, formatExpenseDate } from '../../utils/formatters';
 import { Avatar } from '../common/Avatar';
 import { Modal } from '../common/Modal';
 
@@ -44,6 +44,9 @@ export const ExpenseDetailDrawer: React.FC<ExpenseDetailDrawerProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
               <Avatar name={payer?.name || 'Unknown'} color={payer?.avatarColor} size={28} />
               <span style={{ fontWeight: 600 }}>{payer?.name}</span>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              {formatExpenseDate(expense.date, expense.createdAt)}
             </div>
           </div>
 

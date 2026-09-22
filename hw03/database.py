@@ -158,8 +158,20 @@ if _is_sqlite(DATABASE_URL):
 SessionLocal = sessionmaker(bind=engine, class_=Session, expire_on_commit=False, autoflush=True)
 
 
-def init_db() -> None:
-    Base.metadata.create_all(engine)
+def init_db(max_retries: int = 15, delay: float = 1.0) -> None:
+    if _is_sqlite(DATABASE_URL):
+        Base.metadata.create_all(engine)
+        return
+
+    import time
+    for attempt in range(1, max_retries + 1):
+        try:
+            Base.metadata.create_all(engine)
+            return
+        except Exception:
+            if attempt == max_retries:
+                raise
+            time.sleep(delay)
 
 
 @contextmanager
@@ -177,23 +189,28 @@ def db_session() -> Generator[Session, None, None]:
 
 @contextmanager
 def immediate_transaction() -> Generator[Session, None, None]:
-    """Run one SQLite writer transaction before selecting or changing work.
+    """Run an isolated transaction across SQLite or PostgreSQL.
 
-    SQLite does not support PostgreSQL's ``FOR UPDATE SKIP LOCKED``.  A
-    ``BEGIN IMMEDIATE`` writer reservation serializes claims (and recovery or
-    terminal submissions) across API processes, giving each task one active
-    lease.  This is the intentionally isolated seam for a future PostgreSQL
-    implementation.
+    For SQLite, begins an IMMEDIATE writer reservation to serialize claims.
+    For PostgreSQL, runs within a transaction where row-level operations
+    (e.g., FOR UPDATE SKIP LOCKED) or transaction-level isolation take effect.
     """
 
     connection = engine.connect()
     session = Session(bind=connection, expire_on_commit=False, autoflush=True)
     try:
-        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        if _is_sqlite(DATABASE_URL):
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        else:
+            session.begin()
         yield session
         session.flush()
+        if session.in_transaction():
+            session.commit()
         connection.commit()
     except Exception:
+        if session.in_transaction():
+            session.rollback()
         connection.rollback()
         raise
     finally:

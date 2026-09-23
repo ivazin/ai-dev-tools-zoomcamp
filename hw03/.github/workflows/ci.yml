@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: agent-relay
+  KIND_CLUSTER_NAME: agent-relay
+  RELAY_DATABASE_URL: postgresql+psycopg://relay:relay_password@127.0.0.1:5432/agent_relay
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: relay
+          POSTGRES_PASSWORD: relay_password
+          POSTGRES_DB: agent_relay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U relay -d agent_relay"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check uv
+          uv sync --frozen
+
+      - name: Run starter tests against PostgreSQL
+        run: uv run pytest -q test_agent_relay.py
+
+      - name: Run PostgreSQL integration test
+        run: uv run pytest -q test_postgres_integration.py
+
+      - name: Install kind and kubectl
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          architecture="$(uname -m)"
+          case "$architecture" in
+            x86_64) architecture=amd64 ;;
+            aarch64|arm64) architecture=arm64 ;;
+            *) echo "Unsupported architecture: $architecture" >&2; exit 1 ;;
+          esac
+          curl --fail --location --silent --show-error \
+            --output "$HOME/.local/bin/kind" \
+            "https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-$architecture"
+          curl --fail --location --silent --show-error \
+            --output "$HOME/.local/bin/kubectl" \
+            "https://dl.k8s.io/release/v1.33.0/bin/linux/$architecture/kubectl"
+          chmod +x "$HOME/.local/bin/kind" "$HOME/.local/bin/kubectl"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Docker and kind access
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          if kind get clusters | grep --fixed-strings --line-regexp "$KIND_CLUSTER_NAME"; then
+            kind export kubeconfig --name "$KIND_CLUSTER_NAME"
+          else
+            kind create cluster --name "$KIND_CLUSTER_NAME" --wait 120s
+          fi
+          kubectl config use-context "kind-$KIND_CLUSTER_NAME"
+          kubectl cluster-info
+
+      - name: Build, load, and deploy image
+        env:
+          IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          image="$IMAGE_NAME:$IMAGE_TAG"
+          docker build --tag "$image" .
+          kind load docker-image "$image" --name "$KIND_CLUSTER_NAME"
+          kubectl apply -f k8s/postgres.yaml
+          kubectl rollout status deployment/postgres --timeout=180s
+          kubectl apply -f k8s/agent-relay.yaml
+          kubectl set image deployment/agent-relay agent-relay="$image"
+          kubectl rollout status deployment/agent-relay --timeout=180s
